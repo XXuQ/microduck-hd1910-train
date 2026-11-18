@@ -12,7 +12,7 @@ import time
 import urllib.request
 import zipfile
 
-RELEASE = 'R1.5.21'
+RELEASE = 'R1.5.26'
 
 
 def find_uv(root):
