@@ -1,0 +1,36 @@
+# microduck_rl 克隆产物（由 setup.sh 生成）
+microduck_rl/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.uv/
+
+# 训练产出
+runs/
+logs/
+wandb/
+*.onnx
+*.pt
+*.pth
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 工作区记忆/临时数据（本机专属，不进版本库）
+.workbuddy/
+
+# 回放/录制产物
+render_out/
+*.mp4
+*.gif
+
+# 生成物（setup.sh 在引擎目录里生成，不在本仓库）
+microduck_hd1910/
+
+# setup.sh 写下的引擎路径（本机状态，不进版本库）
+.engine_path
