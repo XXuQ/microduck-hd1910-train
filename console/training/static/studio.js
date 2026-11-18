@@ -102,10 +102,18 @@ function renderStudioChecks(){
 function servoMassSupported(){return studioDraft.baseline==='official_0151'&&!studioDraft.robot.mjcf_path;}
 function effectiveStudioModel(){
  const m=structuredClone(studioData.baseline.model);if(!m)return null;
- const profile=studioData.servo_mass_profile,closure=studioData.mass_closure_profile,choice=studioDraft.robot.servo_mass_model,enabled=servoMassSupported()&&[profile.key,closure.key].includes(choice);
+ const profile=studioData.servo_mass_profile,closure=studioData.mass_closure_profile,abs834=studioData.hd1910_834g_profile,choice=studioDraft.robot.servo_mass_model;
+ const is834=servoMassSupported()&&abs834&&choice===abs834.key;
+ const enabled=servoMassSupported()&&[profile.key,closure.key].includes(choice);
  for(const b of m.bodies){
   const o=studioDraft.robot.bodies?.[b.name]||{};Object.assign(b,o);
-  if(o.mass!==undefined)b.mass_kg=o.mass;
+  if(o.mass!==undefined){b.mass_kg=o.mass;}
+  else if(is834&&abs834.body_masses_kg[b.name]!==undefined){
+   // 834g 绝对质量配方：逐 body 锚定 806g 基准实测值 + 三处修正，惯性按质量比例缩放。
+   const target=abs834.body_masses_kg[b.name],before=b.mass_kg;
+   b.mass_kg=target;b.absolute_834g_mass_g=target*1000;
+   if(o.inertia===undefined)b.inertia=b.inertia.map(v=>v*target/before);
+  }
   b.servo_mass_addition_g=enabled&&o.mass===undefined?(profile.body_counts[b.name]||0)*(profile.replacement_g-profile.reference_g):0;
   b.closure_mass_addition_g=enabled&&choice===closure.key&&o.mass===undefined?(closure.body_additions_g[b.name]||0):0;
   const before=b.mass_kg;b.mass_kg+=(b.servo_mass_addition_g+b.closure_mass_addition_g)/1000;
@@ -115,14 +123,16 @@ function effectiveStudioModel(){
  m.total_mass_kg=m.bodies.reduce((sum,b)=>sum+b.mass_kg,0);return m;
 }
 function renderServoMass(m){
- const p=studioData.servo_mass_profile,c=studioData.mass_closure_profile,choice=studioDraft.robot.servo_mass_model,supported=servoMassSupported(),closed=choice===c.key&&supported;
- const total=m.total_mass_kg*1000,gap=c.target_g-total,custom=!!studioDraft.robot.mjcf_path;
+ const p=studioData.servo_mass_profile,c=studioData.mass_closure_profile,a=studioData.hd1910_834g_profile,choice=studioDraft.robot.servo_mass_model,supported=servoMassSupported(),closed=choice===c.key&&supported,is834=supported&&a&&choice===a.key;
+ const total=m.total_mass_kg*1000,target=is834?a.target_g:c.target_g,gap=target-total,custom=!!studioDraft.robot.mjcf_path;
  const head=m.bodies.find(b=>b.name==='jaw_soft'),trunk=m.bodies.find(b=>b.name==='trunk_base');
- const exact=closed&&!custom&&Math.abs(gap)<.00001&&!Object.values(studioDraft.robot.bodies||{}).some(v=>v.mass!==undefined);
+ const exact=(closed||is834)&&!custom&&Math.abs(gap)<.00001&&!Object.values(studioDraft.robot.bodies||{}).some(v=>v.mass!==undefined);
+ const targetLabel=is834?'834g':(closed?'820g':'820g');
  const rows=m.bodies.map(b=>{const n=p.body_counts[b.name]||0,manual=studioDraft.robot.bodies?.[b.name]?.mass!==undefined;
-  return row([bilingual(b.name,bodyNames),`<strong>${b.mass_g.toFixed(3)}</strong>`,String(n),manual?'手动指定':b.closure_mass_addition_g?'舵机 +'+b.servo_mass_addition_g+'g / 补重 +'+b.closure_mass_addition_g.toFixed(5)+'g':b.servo_mass_addition_g?'舵机 +'+b.servo_mass_addition_g+'g':'沿用模型',`<button class="text-button" data-body="${esc(b.name)}">编辑</button>`]);});
+  const source=manual?'手动指定':is834?(b.absolute_834g_mass_g!==undefined?'834g实测整机':'沿用模型'):b.closure_mass_addition_g?'舵机 +'+b.servo_mass_addition_g+'g / 补重 +'+b.closure_mass_addition_g.toFixed(5)+'g':b.servo_mass_addition_g?'舵机 +'+b.servo_mass_addition_g+'g':'沿用模型';
+  return row([bilingual(b.name,bodyNames),`<strong>${b.mass_g.toFixed(3)}</strong>`,String(n),source,`<button class="text-button" data-body="${esc(b.name)}">编辑</button>`]);});
  return `<div class="panel-body servo-mass-panel">
- <div class="mass-values servo-mass-summary"><div><span>当前模型总重</span><strong id="servo-mass-total">${custom?'待编译核对':total.toFixed(2)+' g'}</strong><small id="servo-mass-gap">${custom?'自定义模型以编译为准':Math.abs(gap)<.00001?'与实测820g一致':(gap>0?'距820g还差 ':'比820g重 ')+Math.abs(gap).toFixed(2)+' g'}</small></div><div><span>头部总成</span><strong>${head?.mass_g.toFixed(3)??'—'} g</strong></div><div><span>躯干总成</span><strong>${trunk?.mass_g.toFixed(3)??'—'} g</strong></div></div>
+ <div class="mass-values servo-mass-summary"><div><span>当前模型总重</span><strong id="servo-mass-total">${custom?'待编译核对':total.toFixed(2)+' g'}</strong><small id="servo-mass-gap">${custom?'自定义模型以编译为准':Math.abs(gap)<.00001?'与实测'+targetLabel+'一致':(gap>0?'距'+targetLabel+'还差 ':'比'+targetLabel+'重 ')+Math.abs(gap).toFixed(2)+' g'}</small></div><div><span>头部总成</span><strong>${head?.mass_g.toFixed(3)??'—'} g</strong></div><div><span>躯干总成</span><strong>${trunk?.mass_g.toFixed(3)??'—'} g</strong></div></div>
  </div>`+table(['部件 · 中英对照','质量 / g','舵机 / 颗','重量来源','操作'],rows);
 }
 function renderActuators(m){
